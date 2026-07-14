@@ -21,22 +21,71 @@ if (!(Test-Path $tempDir)) {
     New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
 }
 
-# --- Stop old process ---
-Get-Process -Name $procName -ErrorAction SilentlyContinue | Stop-Process -Force
-
-# --- Delete old file ---
-if (Test-Path $out) {
-    Remove-Item $out -Force -ErrorAction SilentlyContinue
+# --- Stop old process with wait ---
+$oldProcesses = Get-Process -Name $procName -ErrorAction SilentlyContinue
+if ($oldProcesses) {
+    Write-Host "Stopping existing processes..." -ForegroundColor Yellow
+    $oldProcesses | ForEach-Object {
+        Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
+        # Wait up to 5 seconds for process to exit
+        $_.WaitForExit(5000)
+        if (!$_.HasExited) {
+            Write-Host "Force killing process $($_.Id)..." -ForegroundColor Red
+            Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
+        }
+    }
+    Start-Sleep -Seconds 2
 }
 
-# --- Download fresh copy ---
+# --- Delete old file with retry ---
+if (Test-Path $out) {
+    $retryCount = 0
+    $maxRetries = 3
+    do {
+        try {
+            Remove-Item $out -Force -ErrorAction Stop
+            break
+        }
+        catch {
+            $retryCount++
+            if ($retryCount -ge $maxRetries) {
+                Write-Host "Cannot delete old file. It may be in use." -ForegroundColor Red
+                Read-Host "Press ENTER to exit"
+                exit
+            }
+            Start-Sleep -Seconds 2
+        }
+    } while ($retryCount -lt $maxRetries)
+}
+
+# --- Download fresh copy with progress and timeout ---
 try {
     Write-Host "Downloading..." -ForegroundColor Yellow
-    Invoke-WebRequest -Uri $directUrl -OutFile $out -ErrorAction Stop
+    
+    # Create web client with timeout
+    $webClient = New-Object System.Net.WebClient
+    $webClient.Headers.Add("User-Agent", "PowerShell-Script")
+    
+    # Download with 30-second timeout
+    $downloadTask = $webClient.DownloadFileTaskAsync($directUrl, $out)
+    if (-not $downloadTask.Wait(30000)) {
+        $webClient.CancelAsync()
+        throw "Download timed out after 30 seconds"
+    }
+    
+    # Check for errors
+    if ($downloadTask.Exception) {
+        throw $downloadTask.Exception.InnerException.Message
+    }
 
-    # Verify download
+    # Verify download exists and has size
     if (!(Test-Path $out)) {
         throw "Downloaded file not found."
+    }
+    
+    $fileInfo = Get-Item $out
+    if ($fileInfo.Length -eq 0) {
+        throw "Downloaded file is empty."
     }
 
     Clear-Host
@@ -46,14 +95,30 @@ try {
     Write-Host "======================================" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "100%" -ForegroundColor Green
+    Write-Host "File size: $([math]::Round($fileInfo.Length/1MB, 2)) MB" -ForegroundColor Gray
     Write-Host ""
     Read-Host "Press ENTER to run"
 
     # Run as Administrator
-    Start-Process -FilePath $out -Verb RunAs
+    Start-Process -FilePath $out -Verb RunAs -WindowStyle Hidden
 }
 catch {
+    # Cleanup partial download
+    if (Test-Path $out) {
+        Remove-Item $out -Force -ErrorAction SilentlyContinue
+    }
+    
+    Clear-Host
     Write-Host ""
+    Write-Host "======================================" -ForegroundColor Cyan
+    Write-Host "         PC OPTIMIZER V3" -ForegroundColor Green
+    Write-Host "======================================" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "DOWNLOAD FAILED" -ForegroundColor Red
     Write-Host "ERROR: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host ""
     Read-Host "Press ENTER to exit"
+}
+finally {
+    $webClient.Dispose()
 }
